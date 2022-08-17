@@ -33,6 +33,10 @@ def initPoints():
     for x, y in ti.ndrange(*screen):
         points[x + y * screen[0]][0] = (x + 0.5) / screen[0]
         points[x + y * screen[0]][1] = (y + 0.5) / screen[1]
+    dipoles[0].pos = vec2(0.5, 0.5)
+    dipoles[0].m = 0.01
+    vortexes[0].pos = vec2(0.5, 0.5)
+    vortexes[0].q = -0.5
 
 
 @ti.func
@@ -245,6 +249,6 @@ if __name__ == '__main__':
             refillCount = 0
             refillPoints()
         drawMark(gui, frame)
-        gui.show()
+        gui.show(f'./frames/frame_{frame}.png')
         refillCount += 1
         frame += 1
