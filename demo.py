@@ -14,15 +14,16 @@ arrowField = [int(it / 2) for it in screen]     # number of arrow in window
 meshSpace = 20          # screen * meshSpace = windowSize
 maxElements = 20        # the max number of each element(source/sink, vortex, dipole)
 refillFrame = 20        # frame interval for each refill points
-refillVelThresh = .1    # points will be refilled when the absolute value of the velocity on boundary is greater than this value
+refillVelThresh = .2    # points will be refilled when the absolute value of the velocity on boundary is greater than this value
 V = vec2(1., 0)         # the velocity of uniform stream
 dt = .002
 fadeMax = 10            # frames of fade in/out
 fade = fadeMax          # control arrows' fade in and fade out
+maxPoints = screen[0] * screen[1] * 2
 gui = ti.GUI('demo', tuple(it*meshSpace for it in screen))
 guiHeight = meshSpace * screen[1]
 
-points = ti.Vector.field(2, float, screen[0] * screen[1] * 2)
+points = ti.Vector.field(2, float, maxPoints)
 boundaryVel = ti.Vector.field(2, float, (4, max(*screen)))
 sources = ti.Struct.field({
     "pos": vec2,
@@ -40,9 +41,6 @@ arrows = ti.Struct.field({
     "dir": vec2,
     "vel": ti.f32
 }, shape=arrowField)
-start = ti.field(ti.i32, shape=2)       # index of point on boundary,
-# ([0, 3]: left, bottom, right, top side, [0, screen[0]/[1]): which point on this side)
-lastStart = ti.field(ti.i32, shape=2)
 points.fill(-100)
 
 
@@ -74,93 +72,75 @@ def getVel(pos):
     return vel
 
 
-@ti.func
-def updateStart():      # traverse the points on the boundary
-    if start[0] == 0:
-        start[1] += 1
-        if start[1] >= screen[1]:
-            start[0] = 1
-            start[1] = 0
-    elif start[0] == 2:
-        start[1] += 1
-        if start[1] >= screen[1]:
-            start[0] = 0
-            start[1] = 0
-    elif start[0] == 1:
-        start[0] = 3
-    else:
-        start[1] += 1
-        start[0] = 1
-        if start[1] >= screen[0]:
-            start[0] = 2
-            start[1] = 0
-
-
-@ti.kernel
-def updateBoundaryVel():
-    for i, j in ti.ndrange(4, ti.max(*screen)):
-        if i == 0:
-            if j >= screen[1]:
-                continue
-            pos = vec2(0, (j + .5) / screen[1])
-            boundaryVel[i, j] = getVel(pos)
-        elif i == 1:
-            if j >= screen[0]:
-                continue
-            pos = vec2((j + .5) / screen[0], 0)
-            boundaryVel[i, j] = getVel(pos)
-        elif i == 2:
-            if j >= screen[1]:
-                continue
-            pos = vec2(1, (j + .5) / screen[1])
-            boundaryVel[i, j] = getVel(pos)
-        elif i == 3:
-            if j >= screen[0]:
-                continue
-            pos = vec2((j + .5) / screen[0], 1)
-            boundaryVel[i, j] = getVel(pos)
-
-
 @ti.kernel
 def refillPoints():
     # traverse positions on the boundary. if the normal velocity is greater than thresh, refill point on this position
+    index = 0
+    found = True
     ti.loop_config(serialize=True)
-    started = False
-    for i in range(points.shape[0]):
-        if points[i][0] == -100 and points[i][1] == -100:
-            while start[0] != lastStart[0] or start[1] != lastStart[1]:
-                if started:
-                    updateStart()
-                else:
-                    started = True
-                if start[0] == 0:
-                    if boundaryVel[0, start[1]][0] > refillVelThresh:
-                        points[i] = vec2(0, (start[1] + .5) / screen[1])
-                        break
-                elif start[0] == 1:
-                    if boundaryVel[1, start[1]][1] > refillVelThresh:
-                        points[i] = vec2((start[1] + .5) / screen[0], 0)
-                        break
-                elif start[0] == 2:
-                    if boundaryVel[2, start[1]][0] < -refillVelThresh:
-                        points[i] = vec2(1, (start[1] + .5) / screen[1])
-                        break
-                elif start[0] == 3:
-                    if boundaryVel[3, start[1]][1] < -refillVelThresh:
-                        points[i] = vec2((start[1] + .5) / screen[0], 1)
-                        break
-    lastStart[0] = start[0]
-    lastStart[1] = start[1]
-    updateStart()
+    for i in range(screen[1]):
+        _found = False
+        for _ in range(maxPoints):
+            if points[index][0] == -100:
+                _found = True
+                points[index] = vec2(-dt * refillVelThresh, (i + .5) / screen[1])
+                break
+            index += 1
+            if index >= maxPoints:
+                index = 0
+        if not _found:
+            found = False
+            break
+    if found:
+        for i in range(screen[0]):
+            _found = False
+            for _ in range(maxPoints):
+                if points[index][0] == -100:
+                    _found = True
+                    points[index] = vec2((i + .5) / screen[0], -dt * refillVelThresh)
+                    break
+                index += 1
+                if index >= maxPoints:
+                    index = 0
+            if not _found:
+                found = False
+                break
+    if found:
+        for i in range(screen[1]):
+            _found = False
+            for _ in range(maxPoints):
+                if points[index][0] == -100:
+                    _found = True
+                    points[index] = vec2(1 + dt * refillVelThresh, (i + .5) / screen[1])
+                    break
+                index += 1
+                if index >= maxPoints:
+                    index = 0
+            if not _found:
+                found = False
+                break
+    if found:
+        for i in range(screen[0]):
+            _found = False
+            for _ in range(maxPoints):
+                if points[index][0] == -100:
+                    _found = True
+                    points[index] = vec2((i + .5) / screen[0], 1 + dt * refillVelThresh)
+                    break
+                index += 1
+                if index >= maxPoints:
+                    index = 0
+            if not _found:
+                break
 
 
 @ti.kernel
 def updatePoints():
     for i in points:
-        if 0 <= points[i][0] <= 1 and 0 <= points[i][1] <= 1:
+        if points[i][0] != 100:
             vel = getVel(points[i])
             points[i] += vel * dt
-        else:
+        if not (0 <= points[i][0] <= 1 and 0 <= points[i][1] <= 1):
             points[i] = vec2(-100, -100)
         for j in range(maxElements):
             if sources[j].q < 0 and ti.math.length(points[i] - sources[j].pos) < 0.025:
@@ -296,7 +276,6 @@ def processGuiEvent(gui):
 
 if __name__ == '__main__':
     initPoints()
-    updateBoundaryVel()
     updateArrows()
     refillPoints()
     refillCount = 0
@@ -309,7 +288,6 @@ if __name__ == '__main__':
         gui.circles(ps, 3, color=0x2E94B9)
         if refillCount > refillFrame:
             refillCount = 0
-            updateBoundaryVel()
             refillPoints()
         drawMark(gui, frame)
         gui.show()
