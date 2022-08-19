@@ -180,7 +180,7 @@ def updateArrows():
 
 def drawArrows(gui):
     global fade
-    if fade < 10:
+    if fade < fadeMax:
         fade += 1
     if fade == 0:
         updateArrows()      # after fade out, update arrow filed
