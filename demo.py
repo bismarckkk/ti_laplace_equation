@@ -40,9 +40,6 @@ points.fill(-100)
 
 @ti.kernel
 def initPoints():
-    # for x, y in ti.ndrange(*screen):
-    #     points[x + y * screen[0]][0] = (x + 0.5) / screen[0]
-    #     points[x + y * screen[0]][1] = (y + 0.5) / screen[1]
     dipoles[0].pos = vec2(0.5, 0.5)
     dipoles[0].m = 0.01
     vortexes[0].pos = vec2(0.5, 0.5)
@@ -294,13 +291,6 @@ if __name__ == '__main__':
     refillPoints()
     refillCount = 0
     frame = 0
-    for i in range(800):
-        if refillCount > refillFrame:
-            refillCount = 0
-            updateBoundaryVel()
-            refillPoints()
-        refillCount += 1
-        updatePoints()
     while gui.running:
         processGuiEvent(gui)
         drawArrows(gui)
@@ -312,7 +302,6 @@ if __name__ == '__main__':
             updateBoundaryVel()
             refillPoints()
         drawMark(gui, frame)
-        gui.show(f'./frames/frame_{frame}.png')
         gui.show()
         refillCount += 1
         frame += 1
