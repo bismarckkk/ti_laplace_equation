@@ -1,44 +1,51 @@
 import taichi as ti
 import math
 ti.init()
+vec2 = ti.types.vector(2, float)
 
-screen = (30, 20)
-arrowField = (15, 10)
-meshSpace = 20
-maxItems = 20
-refillFrame = 20
-refillVelThresh = .1
+# Simulation of fundamental solutions of Laplace equation
+# Pressing left mouse button with 's/v/d' key will create new 'source/vortex/dipole' on cursor position,
+#   and pressing right mouse button will create negative one.
+# Pressing left and right mouse buttons will delete element around cursor position.
+# Pressing left/right mouse button without other keys will increase/decrease the intensity of element around cursor.
+
+screen = (30, 20)       # density of point generation positions on the boundary, also decide window size
+arrowField = [it / 2 for it in screen]  # number of arrow in window
+meshSpace = 20          # screen * meshSpace = windowSize
+maxElements = 20        # the max number of each element(source/sink, vortex, dipole)
+refillFrame = 20        # frame interval for each refill points
+refillVelThresh = .1    # points will be refilled when the absolute value of the velocity on boundary is greater than this value
+V = vec2(1., 0)         # the velocity of uniform stream
+dt = .002
+fadeMax = 10            # frames of fade in/out
+fade = fadeMax          # control arrows' fade in and fade out
 gui = ti.GUI('demo', tuple(it*meshSpace for it in screen))
 guiHeight = meshSpace * screen[1]
-vec2 = ti.types.vector(2, float)
-V = vec2(1., 0)
-dt = .002
-fade = 10
 
 points = ti.Vector.field(2, float, screen[0] * screen[1] * 2)
 boundaryVel = ti.Vector.field(2, float, (4, max(*screen)))
 sources = ti.Struct.field({
     "pos": vec2,
     "q": ti.f32
-}, shape=maxItems)
+}, shape=maxElements)
 vortexes = ti.Struct.field({
     "pos": vec2,
     "q": ti.f32
-}, shape=maxItems)
+}, shape=maxElements)
 dipoles = ti.Struct.field({
     "pos": vec2,
     "m": ti.f32
-}, shape=maxItems)
+}, shape=maxElements)
 arrows = ti.Struct.field({
     "dir": vec2,
     "vel": ti.f32
 }, shape=arrowField)
-start = ti.field(ti.i32, shape=2)
+start = ti.field(ti.i32, shape=2)       # index of point on boundary,
+# ([0, 3]: left, bottom, right, top side, [0, screen[0]/[1]): which point on this side)
 lastStart = ti.field(ti.i32, shape=2)
 points.fill(-100)
 
 
-@ti.kernel
 def initPoints():
     dipoles[0].pos = vec2(0.5, 0.5)
     dipoles[0].m = 0.01
@@ -48,17 +55,18 @@ def initPoints():
 
 @ti.func
 def getVel(pos):
-    vel = V
-    for i in range(maxItems):
+    vel = V     # add uniform stream velocity
+    for i in range(maxElements):
+        # add source/sink velocity
         uv = pos - sources[i].pos
         uv[0] *= screen[1] / screen[0]
         vel += uv * sources[i].q / (2 * ti.math.pi * (uv[0] ** 2 + uv[1] ** 2))
-
+        # add vortex velocity
         uv = pos - vortexes[i].pos
         uv = vec2(-uv[1], uv[0])
         uv[0] *= screen[1] / screen[0]
         vel += uv * vortexes[i].q / (2 * ti.math.pi * (uv[0] ** 2 + uv[1] ** 2))
-
+        # add dipole velocity
         uv = pos - dipoles[i].pos
         uv[0] *= screen[1] / screen[0]
         vel_t = vec2(uv[1]**2 - uv[0]**2, -2*uv[0]*uv[1])
@@ -67,7 +75,7 @@ def getVel(pos):
 
 
 @ti.func
-def updateStart():
+def updateStart():      # traverse the points on the boundary
     if start[0] == 0:
         start[1] += 1
         if start[1] >= screen[1]:
@@ -115,6 +123,7 @@ def updateBoundaryVel():
 
 @ti.kernel
 def refillPoints():
+    # traverse positions on the boundary. if the normal velocity is greater than thresh, refill point on this position
     ti.loop_config(serialize=True)
     started = False
     for i in range(points.shape[0]):
@@ -153,7 +162,7 @@ def updatePoints():
             points[i] += vel * dt
         else:
             points[i] = vec2(-100, -100)
-        for j in range(maxItems):
+        for j in range(maxElements):
             if sources[j].q < 0 and ti.math.length(points[i] - sources[j].pos) < 0.025:
                 points[i] = vec2(-100, -100)
             if dipoles[j].m != 0 and ti.math.length(points[i] - dipoles[j].pos) < 0.05:
@@ -174,12 +183,13 @@ def drawArrows(gui):
     if fade < 10:
         fade += 1
     if fade == 0:
-        updateArrows()
-    arr = arrows.to_numpy()
-    vel = arr['vel'].reshape(1, -1)[0]
-    vel = ((vel / vel.max() * 0x88 + 0x55) * (math.fabs(fade / 10))).astype(int)
-    vel *= 2 ** 16 + 2 ** 8 + 1
-    gui.arrow_field(arr['dir'], radius=1.5, color=vel, bound=1)
+        updateArrows()      # after fade out, update arrow filed
+    else:
+        arr = arrows.to_numpy()
+        vel = arr['vel'].reshape(1, -1)[0]
+        vel = ((vel / vel.max() * 0x88 + 0x55) * (math.fabs(fade / 10))).astype(int)
+        vel *= 2 ** 16 + 2 ** 8 + 1
+        gui.arrow_field(arr['dir'], radius=1.5, color=vel, bound=1)
 
 
 def drawMark(gui, frame):
@@ -192,7 +202,7 @@ def drawMark(gui, frame):
         vec2(1 * screen[1] / screen[0], 1) / (guiHeight),
         vec2(-1 * screen[1] / screen[0], -1) / (guiHeight),
     ]
-    for i in range(maxItems):
+    for i in range(maxElements):
         if dipoles[i].m > 0:
             gui.circle(dipoles[i].pos, 0xFFFDC0, dipoles[i].m * 2000)
         elif dipoles[i].m < 0:
@@ -228,8 +238,8 @@ def drawMark(gui, frame):
 def processGuiEvent(gui):
     global fade
     while gui.get_event((ti.GUI.PRESS, ti.GUI.LMB), (ti.GUI.PRESS, ti.GUI.RMB)):
-        if gui.is_pressed(ti.GUI.LMB) and gui.is_pressed(ti.GUI.RMB):
-            for i in range(maxItems):
+        if gui.is_pressed(ti.GUI.LMB) and gui.is_pressed(ti.GUI.RMB):   # process delete event
+            for i in range(maxElements):
                 if sources[i].q != 0 and (sources[i].pos - vec2(*gui.get_cursor_pos())).norm() < 5 / guiHeight:
                     sources[i].q = 0
                 if vortexes[i].q != 0 and (vortexes[i].pos - vec2(*gui.get_cursor_pos())).norm() < 5 / guiHeight:
@@ -237,8 +247,8 @@ def processGuiEvent(gui):
                 if dipoles[i].m != 0 and (dipoles[i].pos - vec2(*gui.get_cursor_pos())).norm() < 5 / guiHeight:
                     dipoles[i].m = 0
         else:
-            if gui.is_pressed('s'):
-                for i in range(maxItems):
+            if gui.is_pressed('s'):         # process add source/sink event
+                for i in range(maxElements):
                     if sources[i].q == 0:
                         if gui.is_pressed(ti.GUI.RMB):
                             sources[i].q -= 1
@@ -246,8 +256,8 @@ def processGuiEvent(gui):
                             sources[i].q += 1
                         sources[i].pos = vec2(*gui.get_cursor_pos())
                         break
-            elif gui.is_pressed('v'):
-                for i in range(maxItems):
+            elif gui.is_pressed('v'):       # process add vortex event
+                for i in range(maxElements):
                     if vortexes[i].q == 0:
                         if gui.is_pressed(ti.GUI.RMB):
                             vortexes[i].q -= 0.5
@@ -255,8 +265,8 @@ def processGuiEvent(gui):
                             vortexes[i].q += 0.5
                         vortexes[i].pos = vec2(*gui.get_cursor_pos())
                         break
-            elif gui.is_pressed('d'):
-                for i in range(maxItems):
+            elif gui.is_pressed('d'):       # process add dipole event
+                for i in range(maxElements):
                     if dipoles[i].m == 0:
                         if gui.is_pressed(ti.GUI.RMB):
                             dipoles[i].m -= 0.01
@@ -265,7 +275,7 @@ def processGuiEvent(gui):
                         dipoles[i].pos = vec2(*gui.get_cursor_pos())
                         break
             else:
-                for i in range(maxItems):
+                for i in range(maxElements):    # process increase/decrease event
                     if sources[i].q != 0 and (sources[i].pos - vec2(*gui.get_cursor_pos())).norm() < 5 / guiHeight:
                         if gui.is_pressed(ti.GUI.RMB):
                             sources[i].q -= 0.5 * int(sources[i].q >= 0.0) - (sources[i].q <= 0.0)
@@ -281,7 +291,7 @@ def processGuiEvent(gui):
                             dipoles[i].m -= 0.001 * int(dipoles[i].m >= 0.0) - (dipoles[i].m <= 0.0)
                         else:
                             dipoles[i].m += 0.001 * int(dipoles[i].m >= 0.0) - (dipoles[i].m <= 0.0)
-        fade = -math.fabs(fade)
+        fade = -math.fabs(fade)     # fade out arrow filed
 
 
 if __name__ == '__main__':
