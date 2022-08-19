@@ -1,6 +1,6 @@
 import taichi as ti
 import math
-ti.init(arch=ti.cpu, cpu_max_num_threads=1)
+ti.init()
 
 screen = (30, 20)
 meshSpace = 20
