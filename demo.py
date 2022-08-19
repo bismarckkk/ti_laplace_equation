@@ -187,7 +187,7 @@ def drawArrows(gui):
     else:
         arr = arrows.to_numpy()
         vel = arr['vel'].reshape(1, -1)[0]
-        vel = ((vel / vel.max() * 0x88 + 0x55) * (math.fabs(fade / 10))).astype(int)
+        vel = ((vel / vel.max() * 0x88 + 0x55) * (math.fabs(fade / fadeMax))).astype(int)
         vel *= 2 ** 16 + 2 ** 8 + 1
         gui.arrow_field(arr['dir'], radius=1.5, color=vel, bound=1)
 
