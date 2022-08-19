@@ -3,6 +3,7 @@ import math
 ti.init()
 
 screen = (30, 20)
+arrowField = (15, 10)
 meshSpace = 20
 maxItems = 20
 refillFrame = 20
@@ -12,6 +13,7 @@ guiHeight = meshSpace * screen[1]
 vec2 = ti.types.vector(2, float)
 V = vec2(1., 0)
 dt = .002
+fade = 10
 
 points = ti.Vector.field(2, float, screen[0] * screen[1] * 2)
 boundaryVel = ti.Vector.field(2, float, (4, max(*screen)))
@@ -27,6 +29,10 @@ dipoles = ti.Struct.field({
     "pos": vec2,
     "m": ti.f32
 }, shape=maxItems)
+arrows = ti.Struct.field({
+    "dir": vec2,
+    "vel": ti.f32
+}, shape=arrowField)
 start = ti.field(ti.i32, shape=2)
 lastStart = ti.field(ti.i32, shape=2)
 points.fill(-100)
@@ -34,9 +40,9 @@ points.fill(-100)
 
 @ti.kernel
 def initPoints():
-    for x, y in ti.ndrange(*screen):
-        points[x + y * screen[0]][0] = (x + 0.5) / screen[0]
-        points[x + y * screen[0]][1] = (y + 0.5) / screen[1]
+    # for x, y in ti.ndrange(*screen):
+    #     points[x + y * screen[0]][0] = (x + 0.5) / screen[0]
+    #     points[x + y * screen[0]][1] = (y + 0.5) / screen[1]
     dipoles[0].pos = vec2(0.5, 0.5)
     dipoles[0].m = 0.01
     vortexes[0].pos = vec2(0.5, 0.5)
@@ -157,6 +163,28 @@ def updatePoints():
                 points[i] = vec2(-100, -100)
 
 
+@ti.kernel
+def updateArrows():
+    for x, y in ti.ndrange(*arrowField):
+        pos = vec2((x + 1) * (1 - 1 / arrowField[0]) / arrowField[0], (y + 1) * (1 - 1 / arrowField[1]) / arrowField[1])
+        vel = getVel(pos)
+        arrows[x, y].vel = vel.norm()
+        arrows[x, y].dir = vel / vel.norm() / meshSpace / 1.5
+
+
+def drawArrows(gui):
+    global fade
+    if fade < 10:
+        fade += 1
+    if fade == 0:
+        updateArrows()
+    arr = arrows.to_numpy()
+    vel = arr['vel'].reshape(1, -1)[0]
+    vel = ((vel / vel.max() * 0x88 + 0x55) * (math.fabs(fade / 10))).astype(int)
+    vel *= 2 ** 16 + 2 ** 8 + 1
+    gui.arrow_field(arr['dir'], radius=1.5, color=vel, bound=1)
+
+
 def drawMark(gui, frame):
     triangleTrans = [
         vec2(0, 1) / (guiHeight),
@@ -201,6 +229,7 @@ def drawMark(gui, frame):
 
 
 def processGuiEvent(gui):
+    global fade
     while gui.get_event((ti.GUI.PRESS, ti.GUI.LMB), (ti.GUI.PRESS, ti.GUI.RMB)):
         if gui.is_pressed(ti.GUI.LMB) and gui.is_pressed(ti.GUI.RMB):
             for i in range(maxItems):
@@ -255,16 +284,19 @@ def processGuiEvent(gui):
                             dipoles[i].m -= 0.001 * int(dipoles[i].m >= 0.0) - (dipoles[i].m <= 0.0)
                         else:
                             dipoles[i].m += 0.001 * int(dipoles[i].m >= 0.0) - (dipoles[i].m <= 0.0)
+        fade = -math.fabs(fade)
 
 
 if __name__ == '__main__':
     initPoints()
     updateBoundaryVel()
+    updateArrows()
     refillPoints()
     refillCount = 0
     frame = 0
     while gui.running:
         processGuiEvent(gui)
+        drawArrows(gui)
         updatePoints()
         ps = points.to_numpy()
         gui.circles(ps, 3, color=0x2E94B9)
