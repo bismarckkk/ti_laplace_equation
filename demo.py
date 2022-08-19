@@ -10,7 +10,7 @@ vec2 = ti.types.vector(2, float)
 # Pressing left/right mouse button without other keys will increase/decrease the intensity of element around cursor.
 
 screen = (30, 20)       # density of point generation positions on the boundary, also decide window size
-arrowField = [it / 2 for it in screen]  # number of arrow in window
+arrowField = [int(it / 2) for it in screen]     # number of arrow in window
 meshSpace = 20          # screen * meshSpace = windowSize
 maxElements = 20        # the max number of each element(source/sink, vortex, dipole)
 refillFrame = 20        # frame interval for each refill points
