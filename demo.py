@@ -132,7 +132,7 @@ def updatePoints():
         for j in range(20):
             if sources[j].q < 0 and ti.math.length(points[i] - sources[j].pos) < 0.025:
                 points[i] = vec2(-100, -100)
-            if ti.math.length(points[i] - dipoles[j].pos) < 0.05:
+            if dipoles[j].m != 0 and ti.math.length(points[i] - dipoles[j].pos) < 0.05:
                 points[i] = vec2(-100, -100)
 
 
@@ -180,35 +180,8 @@ def drawMark(gui, frame):
 
 
 def processGuiEvent(gui):
-    if gui.get_event((ti.GUI.PRESS, ti.GUI.LMB)):
-        if gui.is_pressed('s'):
-            for i in range(20):
-                if sources[i].q == 0:
-                    if gui.is_pressed(ti.GUI.CTRL):
-                        sources[i].q -= 1
-                    else:
-                        sources[i].q += 1
-                    sources[i].pos = vec2(*gui.get_cursor_pos())
-                    break
-        elif gui.is_pressed('v'):
-            for i in range(20):
-                if vortexes[i].q == 0:
-                    if gui.is_pressed(ti.GUI.CTRL):
-                        vortexes[i].q -= 0.5
-                    else:
-                        vortexes[i].q += 0.5
-                    vortexes[i].pos = vec2(*gui.get_cursor_pos())
-                    break
-        elif gui.is_pressed('d'):
-            for i in range(20):
-                if dipoles[i].m == 0:
-                    if gui.is_pressed(ti.GUI.CTRL):
-                        dipoles[i].m -= 0.01
-                    else:
-                        dipoles[i].m += 0.01
-                    dipoles[i].pos = vec2(*gui.get_cursor_pos())
-                    break
-        elif gui.is_pressed('r'):
+    while gui.get_event((ti.GUI.PRESS, ti.GUI.LMB), (ti.GUI.PRESS, ti.GUI.RMB)):
+        if gui.is_pressed(ti.GUI.LMB) and gui.is_pressed(ti.GUI.RMB):
             for i in range(20):
                 if sources[i].q != 0 and (sources[i].pos - vec2(*gui.get_cursor_pos())).norm() < 5 / guiHeight:
                     sources[i].q = 0
@@ -217,22 +190,50 @@ def processGuiEvent(gui):
                 if dipoles[i].m != 0 and (dipoles[i].pos - vec2(*gui.get_cursor_pos())).norm() < 5 / guiHeight:
                     dipoles[i].m = 0
         else:
-            for i in range(20):
-                if sources[i].q != 0 and (sources[i].pos - vec2(*gui.get_cursor_pos())).norm() < 5 / guiHeight:
-                    if gui.is_pressed(ti.GUI.CTRL):
-                        sources[i].q -= 0.5 * int(sources[i].q >= 0.0) - (sources[i].q <= 0.0)
-                    else:
-                        sources[i].q += 0.5 * int(sources[i].q >= 0.0) - (sources[i].q <= 0.0)
-                if vortexes[i].q != 0 and (vortexes[i].pos - vec2(*gui.get_cursor_pos())).norm() < 5 / guiHeight:
-                    if gui.is_pressed(ti.GUI.CTRL):
-                        vortexes[i].q -= 0.1 * int(vortexes[i].q >= 0.0) - (vortexes[i].q <= 0.0)
-                    else:
-                        vortexes[i].q += 0.1 * int(vortexes[i].q >= 0.0) - (vortexes[i].q <= 0.0)
-                if dipoles[i].m != 0 and (dipoles[i].pos - vec2(*gui.get_cursor_pos())).norm() < 5 / guiHeight:
-                    if gui.is_pressed(ti.GUI.CTRL):
-                        dipoles[i].m -= 0.001 * int(dipoles[i].m >= 0.0) - (dipoles[i].m <= 0.0)
-                    else:
-                        dipoles[i].m += 0.001 * int(dipoles[i].m >= 0.0) - (dipoles[i].m <= 0.0)
+            if gui.is_pressed('s'):
+                for i in range(20):
+                    if sources[i].q == 0:
+                        if gui.is_pressed(ti.GUI.RMB):
+                            sources[i].q -= 1
+                        else:
+                            sources[i].q += 1
+                        sources[i].pos = vec2(*gui.get_cursor_pos())
+                        break
+            elif gui.is_pressed('v'):
+                for i in range(20):
+                    if vortexes[i].q == 0:
+                        if gui.is_pressed(ti.GUI.RMB):
+                            vortexes[i].q -= 0.5
+                        else:
+                            vortexes[i].q += 0.5
+                        vortexes[i].pos = vec2(*gui.get_cursor_pos())
+                        break
+            elif gui.is_pressed('d'):
+                for i in range(20):
+                    if dipoles[i].m == 0:
+                        if gui.is_pressed(ti.GUI.RMB):
+                            dipoles[i].m -= 0.01
+                        else:
+                            dipoles[i].m += 0.01
+                        dipoles[i].pos = vec2(*gui.get_cursor_pos())
+                        break
+            else:
+                for i in range(20):
+                    if sources[i].q != 0 and (sources[i].pos - vec2(*gui.get_cursor_pos())).norm() < 5 / guiHeight:
+                        if gui.is_pressed(ti.GUI.RMB):
+                            sources[i].q -= 0.5 * int(sources[i].q >= 0.0) - (sources[i].q <= 0.0)
+                        else:
+                            sources[i].q += 0.5 * int(sources[i].q >= 0.0) - (sources[i].q <= 0.0)
+                    if vortexes[i].q != 0 and (vortexes[i].pos - vec2(*gui.get_cursor_pos())).norm() < 5 / guiHeight:
+                        if gui.is_pressed(ti.GUI.RMB):
+                            vortexes[i].q -= 0.1 * int(vortexes[i].q >= 0.0) - (vortexes[i].q <= 0.0)
+                        else:
+                            vortexes[i].q += 0.1 * int(vortexes[i].q >= 0.0) - (vortexes[i].q <= 0.0)
+                    if dipoles[i].m != 0 and (dipoles[i].pos - vec2(*gui.get_cursor_pos())).norm() < 5 / guiHeight:
+                        if gui.is_pressed(ti.GUI.RMB):
+                            dipoles[i].m -= 0.001 * int(dipoles[i].m >= 0.0) - (dipoles[i].m <= 0.0)
+                        else:
+                            dipoles[i].m += 0.001 * int(dipoles[i].m >= 0.0) - (dipoles[i].m <= 0.0)
 
 
 if __name__ == '__main__':
@@ -249,6 +250,7 @@ if __name__ == '__main__':
             refillCount = 0
             refillPoints()
         drawMark(gui, frame)
-        gui.show(f'./frames/frame_{frame}.png')
+        # gui.show(f'./frames/frame_{frame}.png')
+        gui.show()
         refillCount += 1
         frame += 1
