@@ -24,7 +24,6 @@ gui = ti.GUI('demo', tuple(it*meshSpace for it in screen))
 guiHeight = meshSpace * screen[1]
 
 points = ti.Vector.field(2, float, maxPoints)
-boundaryVel = ti.Vector.field(2, float, (4, max(*screen)))
 sources = ti.Struct.field({
     "pos": vec2,
     "q": ti.f32
@@ -74,7 +73,8 @@ def getVel(pos):
 
 @ti.kernel
 def refillPoints():
-    # traverse positions on the boundary. if the normal velocity is greater than thresh, refill point on this position
+    # traverse positions and refill points on the boundary.
+    # if the normal velocity is less than thresh, refill point will be deleted when update.
     index = 0
     found = True
     ti.loop_config(serialize=True)
@@ -137,7 +137,7 @@ def refillPoints():
 @ti.kernel
 def updatePoints():
     for i in points:
-        if points[i][0] != 100:
+        if points[i][0] != -100:
             vel = getVel(points[i])
             points[i] += vel * dt
         if not (0 <= points[i][0] <= 1 and 0 <= points[i][1] <= 1):
@@ -167,20 +167,25 @@ def drawArrows(gui):
     else:
         arr = arrows.to_numpy()
         vel = arr['vel'].reshape(1, -1)[0]
-        vel = ((vel / vel.max() * 0x88 + 0x55) * (math.fabs(fade / fadeMax))).astype(int)
+        vel = (vel / vel.max() * 0xdd + 0x11) * (math.fabs(fade / fadeMax))
+        mean = vel.mean()
+        print(mean)
+        if mean > 0x7f:
+            vel /= mean / 0x7f      # make uniform stream more beautiful
+        vel = vel.astype(int)
         vel *= 2 ** 16 + 2 ** 8 + 1
         gui.arrow_field(arr['dir'], radius=1.5, color=vel, bound=1)
 
 
 def drawMark(gui, frame):
     triangleTrans = [
-        vec2(0, 1) / (guiHeight),
-        vec2(math.cos(7./6. * math.pi), math.sin(7./6. * math.pi)) / (guiHeight),
-        vec2(math.cos(-1./6. * math.pi), math.sin(-1./6. * math.pi)) / (guiHeight)
+        vec2(0, 1) / guiHeight,
+        vec2(math.cos(7./6. * math.pi), math.sin(7./6. * math.pi)) / guiHeight,
+        vec2(math.cos(-1./6. * math.pi), math.sin(-1./6. * math.pi)) / guiHeight
     ]
     rectTrans = [
-        vec2(1 * screen[1] / screen[0], 1) / (guiHeight),
-        vec2(-1 * screen[1] / screen[0], -1) / (guiHeight),
+        vec2(1 * screen[1] / screen[0], 1) / guiHeight,
+        vec2(-1 * screen[1] / screen[0], -1) / guiHeight,
     ]
     for i in range(maxElements):
         if dipoles[i].m > 0:
