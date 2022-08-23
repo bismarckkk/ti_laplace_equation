@@ -37,6 +37,7 @@ dipoles = ti.Struct.field({
     "m": ti.f32
 }, shape=maxElements)
 arrows = ti.Struct.field({
+    "base": vec2,
     "dir": vec2,
     "vel": ti.f32
 }, shape=arrowField)
@@ -44,6 +45,9 @@ points.fill(-100)
 
 
 def initPoints():
+    for x, y in ti.ndrange(*arrowField):
+        arrows[x, y].base = \
+            vec2((x + 1) * (1 - 1 / arrowField[0]) / arrowField[0], (y + 1) * (1 - 1 / arrowField[1]) / arrowField[1])
     dipoles[0].pos = vec2(0.5, 0.5)
     dipoles[0].m = 0.01
     vortexes[0].pos = vec2(0.5, 0.5)
@@ -152,8 +156,7 @@ def updatePoints():
 @ti.kernel
 def updateArrows():
     for x, y in ti.ndrange(*arrowField):
-        pos = vec2((x + 1) * (1 - 1 / arrowField[0]) / arrowField[0], (y + 1) * (1 - 1 / arrowField[1]) / arrowField[1])
-        vel = getVel(pos)
+        vel = getVel(arrows[x, y].base)
         arrows[x, y].vel = vel.norm()
         arrows[x, y].dir = vel / vel.norm() / meshSpace / 1.5
 
@@ -169,12 +172,15 @@ def drawArrows(gui):
         vel = arr['vel'].reshape(1, -1)[0]
         vel = (vel / vel.max() * 0xdd + 0x11) * (math.fabs(fade / fadeMax))
         mean = vel.mean()
-        print(mean)
         if mean > 0x7f:
             vel /= mean / 0x7f      # make uniform stream more beautiful
         vel = vel.astype(int)
         vel *= 2 ** 16 + 2 ** 8 + 1
-        gui.arrow_field(arr['dir'], radius=1.5, color=vel, bound=1)
+        gui.arrows(
+            arr['base'].reshape(arr['base'].shape[0] * arr['base'].shape[1], 2),
+            arr['dir'].reshape(arr['dir'].shape[0] * arr['dir'].shape[1], 2),
+            radius=1.5, color=vel
+        )
 
 
 def drawMark(gui, frame):
