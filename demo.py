@@ -1,5 +1,6 @@
 import taichi as ti
 import math
+
 ti.init()
 vec2 = ti.types.vector(2, float)
 
@@ -9,18 +10,18 @@ vec2 = ti.types.vector(2, float)
 # Pressing left and right mouse buttons will delete element around cursor position.
 # Pressing left/right mouse button without other keys will increase/decrease the intensity of element around cursor.
 
-screen = (30, 20)       # density of point generation positions on the boundary, also decide window size
-arrowField = [int(it / 2) for it in screen]     # number of arrow in window
-meshSpace = 20          # screen * meshSpace = windowSize
-maxElements = 20        # the max number of each element(source/sink, vortex, dipole)
-refillFrame = 20        # frame interval for each refill points
-refillVelThresh = .2    # points will be refilled when the absolute value of the velocity on boundary is greater than this value
-V = vec2(1., 0)         # the velocity of uniform stream
+screen = (30, 20)  # density of point generation positions on the boundary, also decide window size
+arrowField = [int(it / 2) for it in screen]  # number of arrow in window
+meshSpace = 20  # screen * meshSpace = windowSize
+maxElements = 20  # the max number of each element(source/sink, vortex, dipole)
+refillFrame = 20  # frame interval for each refill points
+refillVelThresh = .2  # points will be refilled when the absolute value of the velocity on boundary is greater than this value
+V = vec2(1., 0)  # the velocity of uniform stream
 dt = .002
-fadeMax = 10            # frames of fade in/out
-fade = fadeMax          # control arrows' fade in and fade out
+fadeMax = 10  # frames of fade in/out
+fade = fadeMax  # control arrows' fade in and fade out
 maxPoints = screen[0] * screen[1] * 2
-gui = ti.GUI('demo', tuple(it*meshSpace for it in screen))
+gui = ti.GUI('demo', tuple(it * meshSpace for it in screen))
 guiHeight = meshSpace * screen[1]
 
 points = ti.Vector.field(2, float, maxPoints)
@@ -56,7 +57,7 @@ def initPoints():
 
 @ti.func
 def getVel(pos):
-    vel = V     # add uniform stream velocity
+    vel = V  # add uniform stream velocity
     for i in range(maxElements):
         # add source/sink velocity
         uv = pos - sources[i].pos
@@ -70,9 +71,38 @@ def getVel(pos):
         # add dipole velocity
         uv = pos - dipoles[i].pos
         uv[0] *= screen[1] / screen[0]
-        vel_t = vec2(uv[1]**2 - uv[0]**2, -2*uv[0]*uv[1])
+        vel_t = vec2(uv[1] ** 2 - uv[0] ** 2, -2 * uv[0] * uv[1])
         vel += vel_t * dipoles[i].m / (uv[0] ** 2 + uv[1] ** 2) ** 2
     return vel
+
+
+# @param.boundary: 0: left, 1: bottom, 2: right, 3: top
+# @param.index: last access point index
+@ti.func
+def refillPointsOnOneBoundary(boundary, index):
+    pointsNumber = screen[0]
+    if boundary == 0 or boundary == 2:
+        pointsNumber = screen[1]
+    for i in range(pointsNumber):
+        found = False
+        for _ in range(maxPoints):
+            if points[index][0] == -100:
+                found = True
+                if boundary == 0:
+                    points[index] = vec2(-dt * refillVelThresh, (i + .5) / screen[1])
+                elif boundary == 1:
+                    points[index] = vec2((i + .5) / screen[0], -dt * refillVelThresh)
+                elif boundary == 2:
+                    points[index] = vec2(1 + dt * refillVelThresh, (i + .5) / screen[1])
+                elif boundary == 3:
+                    points[index] = vec2((i + .5) / screen[0], 1 + dt * refillVelThresh)
+                break
+            index += 1
+            if index >= maxPoints:
+                index = 0
+        if not found:
+            break
+    return index
 
 
 @ti.kernel
@@ -82,60 +112,12 @@ def refillPoints():
     index = 0
     found = True
     ti.loop_config(serialize=True)
-    for i in range(screen[1]):
-        _found = False
-        for _ in range(maxPoints):
-            if points[index][0] == -100:
-                _found = True
-                points[index] = vec2(-dt * refillVelThresh, (i + .5) / screen[1])
-                break
-            index += 1
-            if index >= maxPoints:
-                index = 0
-        if not _found:
-            found = False
+    for i in range(4):
+        _index = refillPointsOnOneBoundary(i, index)
+        if _index == index:
             break
-    if found:
-        for i in range(screen[0]):
-            _found = False
-            for _ in range(maxPoints):
-                if points[index][0] == -100:
-                    _found = True
-                    points[index] = vec2((i + .5) / screen[0], -dt * refillVelThresh)
-                    break
-                index += 1
-                if index >= maxPoints:
-                    index = 0
-            if not _found:
-                found = False
-                break
-    if found:
-        for i in range(screen[1]):
-            _found = False
-            for _ in range(maxPoints):
-                if points[index][0] == -100:
-                    _found = True
-                    points[index] = vec2(1 + dt * refillVelThresh, (i + .5) / screen[1])
-                    break
-                index += 1
-                if index >= maxPoints:
-                    index = 0
-            if not _found:
-                found = False
-                break
-    if found:
-        for i in range(screen[0]):
-            _found = False
-            for _ in range(maxPoints):
-                if points[index][0] == -100:
-                    _found = True
-                    points[index] = vec2((i + .5) / screen[0], 1 + dt * refillVelThresh)
-                    break
-                index += 1
-                if index >= maxPoints:
-                    index = 0
-            if not _found:
-                break
+        else:
+            index = _index
 
 
 @ti.kernel
@@ -166,14 +148,14 @@ def drawArrows(gui):
     if fade < fadeMax:
         fade += 1
     if fade == 0:
-        updateArrows()      # after fade out, update arrow filed
+        updateArrows()  # after fade out, update arrow filed
     else:
         arr = arrows.to_numpy()
         vel = arr['vel'].reshape(1, -1)[0]
         vel = (vel / vel.max() * 0xdd + 0x11) * (math.fabs(fade / fadeMax))
         mean = vel.mean()
         if mean > 0x7f:
-            vel /= mean / 0x7f      # make uniform stream more beautiful
+            vel /= mean / 0x7f  # make uniform stream more beautiful
         vel = vel.astype(int)
         vel *= 2 ** 16 + 2 ** 8 + 1
         gui.arrows(
@@ -186,8 +168,8 @@ def drawArrows(gui):
 def drawMark(gui, frame):
     triangleTrans = [
         vec2(0, 1) / guiHeight,
-        vec2(math.cos(7./6. * math.pi), math.sin(7./6. * math.pi)) / guiHeight,
-        vec2(math.cos(-1./6. * math.pi), math.sin(-1./6. * math.pi)) / guiHeight
+        vec2(math.cos(7. / 6. * math.pi), math.sin(7. / 6. * math.pi)) / guiHeight,
+        vec2(math.cos(-1. / 6. * math.pi), math.sin(-1. / 6. * math.pi)) / guiHeight
     ]
     rectTrans = [
         vec2(1 * screen[1] / screen[0], 1) / guiHeight,
@@ -229,7 +211,7 @@ def drawMark(gui, frame):
 def processGuiEvent(gui):
     global fade
     while gui.get_event((ti.GUI.PRESS, ti.GUI.LMB), (ti.GUI.PRESS, ti.GUI.RMB)):
-        if gui.is_pressed(ti.GUI.LMB) and gui.is_pressed(ti.GUI.RMB):   # process delete event
+        if gui.is_pressed(ti.GUI.LMB) and gui.is_pressed(ti.GUI.RMB):  # process delete event
             for i in range(maxElements):
                 if sources[i].q != 0 and (sources[i].pos - vec2(*gui.get_cursor_pos())).norm() < 5 / guiHeight:
                     sources[i].q = 0
@@ -238,7 +220,7 @@ def processGuiEvent(gui):
                 if dipoles[i].m != 0 and (dipoles[i].pos - vec2(*gui.get_cursor_pos())).norm() < 5 / guiHeight:
                     dipoles[i].m = 0
         else:
-            if gui.is_pressed('s'):         # process add source/sink event
+            if gui.is_pressed('s'):  # process add source/sink event
                 for i in range(maxElements):
                     if sources[i].q == 0:
                         if gui.is_pressed(ti.GUI.RMB):
@@ -247,7 +229,7 @@ def processGuiEvent(gui):
                             sources[i].q += 1
                         sources[i].pos = vec2(*gui.get_cursor_pos())
                         break
-            elif gui.is_pressed('v'):       # process add vortex event
+            elif gui.is_pressed('v'):  # process add vortex event
                 for i in range(maxElements):
                     if vortexes[i].q == 0:
                         if gui.is_pressed(ti.GUI.RMB):
@@ -256,7 +238,7 @@ def processGuiEvent(gui):
                             vortexes[i].q += 0.5
                         vortexes[i].pos = vec2(*gui.get_cursor_pos())
                         break
-            elif gui.is_pressed('d'):       # process add dipole event
+            elif gui.is_pressed('d'):  # process add dipole event
                 for i in range(maxElements):
                     if dipoles[i].m == 0:
                         if gui.is_pressed(ti.GUI.RMB):
@@ -266,7 +248,7 @@ def processGuiEvent(gui):
                         dipoles[i].pos = vec2(*gui.get_cursor_pos())
                         break
             else:
-                for i in range(maxElements):    # process increase/decrease event
+                for i in range(maxElements):  # process increase/decrease event
                     if sources[i].q != 0 and (sources[i].pos - vec2(*gui.get_cursor_pos())).norm() < 5 / guiHeight:
                         if gui.is_pressed(ti.GUI.RMB):
                             sources[i].q -= 0.5 * int(sources[i].q >= 0.0) - (sources[i].q <= 0.0)
@@ -282,7 +264,7 @@ def processGuiEvent(gui):
                             dipoles[i].m -= 0.001 * int(dipoles[i].m >= 0.0) - (dipoles[i].m <= 0.0)
                         else:
                             dipoles[i].m += 0.001 * int(dipoles[i].m >= 0.0) - (dipoles[i].m <= 0.0)
-        fade = -math.fabs(fade)     # fade out arrow filed
+        fade = -math.fabs(fade)  # fade out arrow filed
 
 
 if __name__ == '__main__':
